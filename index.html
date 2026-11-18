@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>بازی موشکی ایران</title>
+<style>
+  body { margin: 0; overflow: hidden; background-color: #111; }
+  #missile {
+    width: 20px;
+    height: 50px;
+    background-color: red;
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+</style>
+</head>
+<body>
+
+<div id="missile"></div>
+
+<script>
+  const missile = document.getElementById('missile');
+  let position = 10;
+  let isFlying = false;
+
+  document.addEventListener('keydown', (event) => {
+    if (event.code === 'Space' && !isFlying) {
+       isFlying = true;
+       fly();
+    }
+  });
+
+  function fly() {
+    if (position < window.innerHeight) {
+      position += 5;
+      missile.style.bottom = position + 'px';
+      requestAnimationFrame(fly);
+    } else {
+      isFlying = false;
+      position = 10;
+      missile.style.bottom = position + 'px';
+    }
+  }
+</script>
+
+</body>
+</html>
