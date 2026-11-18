@@ -1,48 +1,223 @@
 <!DOCTYPE html>
-<html>
+<html lang="fa" dir="rtl">
 <head>
-<title>بازی موشکی ایران</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>اتاق فرماندهی موشکی</title>
 <style>
-  body { margin: 0; overflow: hidden; background-color: #111; }
-  #missile {
-    width: 20px;
-    height: 50px;
-    background-color: red;
+  body, html { 
+    margin: 0; padding: 0; overflow: hidden; 
+    background-color: #000; font-family: Tahoma, Arial, sans-serif; 
+    touch-action: none; /* جلوگیری از زوم شدن در موبایل */
+  }
+  #gameCanvas { display: block; }
+  
+  /* پنل فرماندهی با ترکیب رنگی مشکی و طلایی */
+  #ui-panel {
     position: absolute;
-    bottom: 10px;
-    left: 50%;
-    transform: translateX(-50%);
+    bottom: 0; width: 100%;
+    background: linear-gradient(to top, #111, #000);
+    border-top: 2px solid #D4AF37; /* حاشیه طلایی */
+    color: #D4AF37;
+    padding: 15px;
+    box-sizing: border-box;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    box-shadow: 0 -5px 20px rgba(212, 175, 55, 0.15);
+  }
+  .missile-btn {
+    background: #1a1a1a;
+    color: #D4AF37;
+    border: 1px solid #D4AF37;
+    padding: 10px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    font-family: inherit;
+    transition: all 0.3s;
+  }
+  .missile-btn:hover, .missile-btn.active {
+    background: #D4AF37;
+    color: #000;
+    box-shadow: 0 0 10px #D4AF37;
+  }
+  #status-board {
+    position: absolute; top: 20px; right: 20px;
+    color: #D4AF37; font-size: 16px;
+    text-shadow: 0 0 5px rgba(212, 175, 55, 0.5);
+    background: rgba(0,0,0,0.7);
+    padding: 10px; border: 1px solid #D4AF37; border-radius: 5px;
   }
 </style>
 </head>
 <body>
 
-<div id="missile"></div>
+<canvas id="gameCanvas"></canvas>
+<div id="status-board">وضعیت: آماده دریافت مختصات هدف...</div>
+
+<div id="ui-panel">
+  <div>زرادخانه:</div>
+  <button class="missile-btn active" onclick="selectMissile(0)">سجیل (بُرد بلند)</button>
+  <button class="missile-btn" onclick="selectMissile(1)">خرمشهر (قدرت بالا)</button>
+  <button class="missile-btn" onclick="selectMissile(2)">فاتح (نقطه‌زن سریع)</button>
+</div>
 
 <script>
-  const missile = document.getElementById('missile');
-  let position = 10;
-  let isFlying = false;
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  window.addEventListener('resize', resize);
+  resize();
 
-  document.addEventListener('keydown', (event) => {
-    if (event.code === 'Space' && !isFlying) {
-       isFlying = true;
-       fly();
-    }
-  });
+  let target = null;
+  let missile = null;
+  let particles = [];
+  let currentMissileType = 0;
+  
+  // مشخصات انواع موشک‌ها
+  const missiles = [
+    { name: 'سجیل', speed: 6, color: '#D4AF37', blastRadius: 80, particleCount: 50 },
+    { name: 'خرمشهر', speed: 4, color: '#ff4444', blastRadius: 150, particleCount: 100 },
+    { name: 'فاتح', speed: 12, color: '#44ccff', blastRadius: 40, particleCount: 30 }
+  ];
 
-  function fly() {
-    if (position < window.innerHeight) {
-      position += 5;
-      missile.style.bottom = position + 'px';
-      requestAnimationFrame(fly);
-    } else {
-      isFlying = false;
-      position = 10;
-      missile.style.bottom = position + 'px';
+  // رسم صفحه رادار
+  function drawRadar() {
+    ctx.fillStyle = '#050805'; // پس زمینه تاریک راداری
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // شبکه شطرنجی طلایی/سبز تیره
+    ctx.strokeStyle = 'rgba(212, 175, 55, 0.07)';
+    ctx.lineWidth = 1;
+    for(let i=0; i<canvas.width; i+=40) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,canvas.height); ctx.stroke(); }
+    for(let i=0; i<canvas.height; i+=40) { ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(canvas.width,i); ctx.stroke(); }
+    
+    // خطوط اسکن رادار
+    ctx.beginPath();
+    ctx.arc(canvas.width/2, canvas.height, canvas.height, 0, Math.PI, true);
+    ctx.strokeStyle = 'rgba(212, 175, 55, 0.2)';
+    ctx.stroke();
+
+    // نشانگر هدف قفل شده
+    if(target && !missile) {
+      ctx.strokeStyle = '#ff3333';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(target.x, target.y, 15, 0, Math.PI*2);
+      ctx.moveTo(target.x - 25, target.y); ctx.lineTo(target.x + 25, target.y);
+      ctx.moveTo(target.x, target.y - 25); ctx.lineTo(target.x, target.y + 25);
+      ctx.stroke();
     }
   }
-</script>
 
+  function selectMissile(index) {
+    currentMissileType = index;
+    document.querySelectorAll('.missile-btn').forEach((btn, i) => {
+      if(i === index) btn.classList.add('active');
+      else btn.classList.remove('active');
+    });
+  }
+
+  // سیستم هدف‌گیری با کلیک یا لمس
+  canvas.addEventListener('pointerdown', (e) => {
+    if(e.clientY > canvas.height - 80) return; // جلوگیری از کلیک روی پنل پایین
+    if(missile) return; // اگر موشکی در راه است، کلیک جدید ثبت نشود
+    
+    target = { x: e.clientX, y: e.clientY };
+    document.getElementById('status-board').innerText = `هدف قفل شد: [${Math.floor(target.x)} , ${Math.floor(target.y)}] | شلیک ${missiles[currentMissileType].name}...`;
+    
+    // تاخیر کوتاه برای شبیه‌سازی زمان پرتاب
+    setTimeout(() => {
+      missile = {
+        x: canvas.width / 2,
+        y: canvas.height,
+        tx: target.x,
+        ty: target.y,
+        type: missiles[currentMissileType]
+      };
+    }, 400);
+  });
+
+  // حرکت موشک
+  function updateAndDrawMissile() {
+    if(!missile) return;
+    
+    const dx = missile.tx - missile.x;
+    const dy = missile.ty - missile.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    
+    if(dist < missile.type.speed) {
+      // رسیدن به هدف و انفجار
+      createExplosion(missile.tx, missile.ty, missile.type.color, missile.type.particleCount);
+      document.getElementById('status-board').innerText = `برخورد تایید شد! هدف منهدم گردید.`;
+      missile = null;
+      target = null;
+      setTimeout(() => {
+        if(!missile) document.getElementById('status-board').innerText = 'وضعیت: آماده دریافت مختصات هدف...';
+      }, 3000);
+    } else {
+      // حرکت به سمت هدف
+      missile.x += (dx / dist) * missile.type.speed;
+      missile.y += (dy / dist) * missile.type.speed;
+      
+      // رسم سرجنگی موشک
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(missile.x, missile.y, 3, 0, Math.PI*2);
+      ctx.fill();
+      
+      // رسم خط آتش پشت موشک
+      ctx.strokeStyle = missile.type.color;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(canvas.width/2, canvas.height);
+      ctx.lineTo(missile.x, missile.y);
+      ctx.stroke();
+    }
+  }
+
+  // سیستم ذرات انفجار
+  function createExplosion(x, y, color, count) {
+    for(let i=0; i<count; i++) {
+      particles.push({
+        x: x, y: y,
+        vx: (Math.random() - 0.5) * 15,
+        vy: (Math.random() - 0.5) * 15,
+        life: 1.0, color: color, maxLife: Math.random() * 30 + 10
+      });
+    }
+  }
+
+  function updateAndDrawParticles() {
+    for(let i = particles.length - 1; i >= 0; i--) {
+      let p = particles[i];
+      p.x += p.vx; p.y += p.vy;
+      p.life -= 1/p.maxLife;
+      if(p.life <= 0) { particles.splice(i, 1); continue; }
+      
+      ctx.globalAlpha = p.life;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, Math.random()*3+1, 0, Math.PI*2);
+      ctx.fill();
+      ctx.globalAlpha = 1.0;
+    }
+  }
+
+  // حلقه اصلی بازی
+  function loop() {
+    drawRadar();
+    updateAndDrawMissile();
+    updateAndDrawParticles();
+    requestAnimationFrame(loop);
+  }
+  
+  loop(); // شروع بازی
+</script>
 </body>
 </html>
