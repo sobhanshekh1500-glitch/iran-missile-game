@@ -18,23 +18,29 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Set up JDK 21
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
+          java-version: '17'
           distribution: 'temurin'
 
       - name: Prepare web files
         run: |
           mkdir -p www
-          find . -maxdepth 1 ! -name '.' ! -name '.git' ! -name '.github' ! -name 'www' -exec cp -r {} www/ \;
+          for item in *; do
+            if [ "$item" != "www" ]; then
+              cp -r "$item" www/
+            fi
+          done
 
-      - name: Initialize Capacitor and Add Android
+      - name: Setup Capacitor and Android
         run: |
+          rm -f package.json package-lock.json capacitor.config.json capacitor.config.ts
           npm init -y
-          npm install @capacitor/core @capacitor/cli @capacitor/android
+          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
           npx cap init "MyApp" "com.example.myapp" --web-dir www
           npx cap add android
+          npx cap sync android
 
       - name: Build Debug APK
         run: |
